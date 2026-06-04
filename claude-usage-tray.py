@@ -410,6 +410,142 @@ def on_open_claude_code(icon, item):
     )
 
 
+def on_settings(icon, item):
+    """Open settings window."""
+    threading.Thread(target=show_settings_window, daemon=True).start()
+
+
+def show_settings_window():
+    """Show a native Windows settings dialog using tkinter."""
+    import tkinter as tk
+    from tkinter import ttk, messagebox, colorchooser
+
+    current = load_config()
+
+    win = tk.Tk()
+    win.title("Claude Usage Tray — Settings")
+    win.resizable(False, False)
+    win.attributes("-topmost", True)
+
+    frame = ttk.Frame(win, padding=15)
+    frame.grid(sticky="nsew")
+
+    row = 0
+
+    # --- Poll interval ---
+    ttk.Label(frame, text="Refresh interval (sec):").grid(row=row, column=0, sticky="w", pady=3)
+    poll_var = tk.IntVar(value=current["poll_interval"])
+    ttk.Spinbox(frame, from_=10, to=600, textvariable=poll_var, width=8).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Icon size ---
+    ttk.Label(frame, text="Icon size (px):").grid(row=row, column=0, sticky="w", pady=3)
+    icon_var = tk.IntVar(value=current["icon_size"])
+    ttk.Spinbox(frame, from_=32, to=128, textvariable=icon_var, width=8).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Thresholds ---
+    ttk.Label(frame, text="Notification thresholds (%):").grid(row=row, column=0, sticky="w", pady=3)
+    thresh_var = tk.StringVar(value=", ".join(str(t) for t in current["thresholds"]))
+    ttk.Entry(frame, textvariable=thresh_var, width=15).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Color thresholds ---
+    ttk.Label(frame, text="Color thresholds (%):").grid(row=row, column=0, sticky="w", pady=3)
+    cthresh_var = tk.StringVar(value=", ".join(str(t) for t in current["color_thresholds"]))
+    ttk.Entry(frame, textvariable=cthresh_var, width=15).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Working dir ---
+    ttk.Label(frame, text="Working directory:").grid(row=row, column=0, sticky="w", pady=3)
+    wdir_var = tk.StringVar(value=current["working_dir"])
+    ttk.Entry(frame, textvariable=wdir_var, width=30).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Credentials path ---
+    ttk.Label(frame, text="Credentials path:").grid(row=row, column=0, sticky="w", pady=3)
+    cred_var = tk.StringVar(value=current["credentials_path"])
+    ttk.Entry(frame, textvariable=cred_var, width=30).grid(row=row, column=1, sticky="w", pady=3)
+    row += 1
+
+    # --- Checkboxes ---
+    sound_var = tk.BooleanVar(value=current["notification_sound"])
+    ttk.Checkbutton(frame, text="Notification sound", variable=sound_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+    row += 1
+
+    reset_var = tk.BooleanVar(value=current["notify_on_reset"])
+    ttk.Checkbutton(frame, text="Notify on limit reset", variable=reset_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+    row += 1
+
+    # --- Color buttons ---
+    color_vars = {}
+    for name in ("green", "yellow", "orange", "red"):
+        rgb = current["colors"][name]
+        color_vars[name] = list(rgb)
+
+    def pick_color(name):
+        cur = color_vars[name]
+        result = colorchooser.askcolor(
+            color=f"#{cur[0]:02x}{cur[1]:02x}{cur[2]:02x}",
+            title=f"Pick {name} color",
+            parent=win,
+        )
+        if result[0]:
+            color_vars[name] = [int(c) for c in result[0]]
+            btns[name].configure(style=f"{name}.TButton")
+
+    ttk.Label(frame, text="Icon colors:").grid(row=row, column=0, sticky="w", pady=3)
+    color_frame = ttk.Frame(frame)
+    color_frame.grid(row=row, column=1, sticky="w", pady=3)
+    btns = {}
+    for i, name in enumerate(("green", "yellow", "orange", "red")):
+        btn = ttk.Button(color_frame, text=name, width=7, command=lambda n=name: pick_color(n))
+        btn.grid(row=0, column=i, padx=2)
+        btns[name] = btn
+    row += 1
+
+    # --- Save / Cancel ---
+    def parse_int_list(s):
+        return sorted(int(x.strip()) for x in s.split(",") if x.strip().isdigit())
+
+    def on_save():
+        new_cfg = {
+            "poll_interval": poll_var.get(),
+            "icon_size": icon_var.get(),
+            "thresholds": parse_int_list(thresh_var.get()),
+            "color_thresholds": parse_int_list(cthresh_var.get()),
+            "working_dir": wdir_var.get(),
+            "credentials_path": cred_var.get(),
+            "notification_sound": sound_var.get(),
+            "notify_on_reset": reset_var.get(),
+            "colors": color_vars,
+        }
+        try:
+            CONFIG_PATH.write_text(
+                json.dumps(new_cfg, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            messagebox.showinfo("Settings", "Saved. Restart app to apply changes.", parent=win)
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=win)
+
+    btn_frame = ttk.Frame(frame)
+    btn_frame.grid(row=row, column=0, columnspan=2, pady=10)
+    ttk.Button(btn_frame, text="Save", command=on_save).grid(row=0, column=0, padx=5)
+    ttk.Button(btn_frame, text="Cancel", command=win.destroy).grid(row=0, column=1, padx=5)
+
+    # Center on screen
+    win.update_idletasks()
+    w = win.winfo_width()
+    h = win.winfo_height()
+    x = (win.winfo_screenwidth() - w) // 2
+    y = (win.winfo_screenheight() - h) // 2
+    win.geometry(f"+{x}+{y}")
+
+    win.mainloop()
+
+
 def on_refresh(icon, item):
     """Manual refresh."""
     ok = fetch_usage()
@@ -462,6 +598,7 @@ def main():
             pystray.MenuItem("Open Claude", on_open_claude, default=True),
             pystray.MenuItem("Open Claude Code", on_open_claude_code),
             pystray.MenuItem("Refresh", on_refresh),
+            pystray.MenuItem("Settings", on_settings),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(f"v{VERSION}", None, enabled=False),
             pystray.MenuItem("Quit", on_quit),
