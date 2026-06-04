@@ -2,7 +2,7 @@
 
 **EN** | [RU](#ru)
 
-Real-time Windows system tray monitor for [Claude](https://claude.ai) API usage limits.
+Real-time Windows system tray monitor for [Claude](https://claude.ai) usage limits.
 
 ![Windows](https://img.shields.io/badge/platform-Windows-blue)
 ![Python](https://img.shields.io/badge/python-3.10+-green)
@@ -19,7 +19,7 @@ The app sits in your system tray and shows your current Claude usage as a color-
 | Orange | 70 - 85% |
 | Red | > 85% |
 
-Data is fetched from `claude.ai/api/organizations/{org}/usage` via [Chrome Bridge](https://nicedayzhu.github.io/chrome-bridge/) — a local browser automation tool that uses your active Claude session cookies.
+Uses **Claude Code OAuth credentials** (`~/.claude/.credentials.json`) to fetch usage data directly from `api.anthropic.com`. No browser automation, no cookies, no extra tools needed.
 
 ## Features
 
@@ -29,15 +29,15 @@ Data is fetched from `claude.ai/api/organizations/{org}/usage` via [Chrome Bridg
 - **Notification on limit reset** when usage drops from 100%
 - **Tooltip** with session / weekly / extra usage and reset countdown
 - **Tray menu**: open Claude Desktop, open Claude Code CLI, manual refresh
+- **Auto token refresh** when OAuth token expires
 - **Lock file** prevents duplicate instances
 - Auto-refresh every 60 seconds (configurable)
 
-## Requirements
+## Prerequisites
 
 - **Windows 10 / 11**
 - **Python 3.10+**
-- **[Chrome Bridge](https://nicedayzhu.github.io/chrome-bridge/)** running on `localhost:3456`
-- Active Claude Pro/Team session in Chrome
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** installed and logged in (`claude` CLI)
 
 ### Install dependencies
 
@@ -47,18 +47,15 @@ pip install pystray Pillow winotify
 
 ## Setup
 
-### 1. Get your Organization ID
+### 1. Make sure Claude Code is logged in
 
-1. Open [claude.ai/settings](https://claude.ai/settings) in Chrome
-2. Copy the UUID from the URL: `claude.ai/settings/organizations/<THIS-IS-YOUR-ORG-ID>`
-
-### 2. Set environment variable
-
-```powershell
-[Environment]::SetEnvironmentVariable("CLAUDE_ORG_ID", "your-org-id-here", "User")
+```bash
+claude
 ```
 
-### 3. Run
+This creates `~/.claude/.credentials.json` with OAuth tokens. That's all the app needs.
+
+### 2. Run
 
 ```bash
 # Direct (with console)
@@ -71,7 +68,7 @@ pythonw -X utf8 claude-usage-tray.py
 wscript start-claude-tray.vbs
 ```
 
-### 4. Autostart (optional)
+### 3. Autostart (optional)
 
 Place a shortcut to `start-claude-tray.vbs` in:
 ```
@@ -80,12 +77,10 @@ Place a shortcut to `start-claude-tray.vbs` in:
 
 ## Configuration
 
-All settings via environment variables:
+Optional environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_ORG_ID` | *(required)* | Your Claude organization UUID |
-| `CHROME_BRIDGE_URL` | `http://localhost:3456` | Chrome Bridge endpoint |
 | `CLAUDE_POLL_INTERVAL` | `60` | Refresh interval in seconds |
 | `CLAUDE_WORKING_DIR` | `~` | Directory for "Open Claude Code" menu item |
 
@@ -110,7 +105,7 @@ All settings via environment variables:
 | Оранжевый | 70 - 85% |
 | Красный | > 85% |
 
-Данные получаются из `claude.ai/api/organizations/{org}/usage` через [Chrome Bridge](https://nicedayzhu.github.io/chrome-bridge/) — локальный инструмент автоматизации браузера, использующий куки активной сессии Claude.
+Использует **OAuth-токены Claude Code** (`~/.claude/.credentials.json`) для получения данных напрямую с `api.anthropic.com`. Никакой автоматизации браузера, куки или дополнительных инструментов не требуется.
 
 ## Возможности
 
@@ -120,6 +115,7 @@ All settings via environment variables:
 - **Уведомление о сбросе лимита** при снижении расхода со 100%
 - **Тултип** с детальной информацией и обратным отсчётом до сброса
 - **Меню в трее**: открыть Claude Desktop, Claude Code CLI, ручное обновление
+- **Автоматическое обновление токена** при истечении OAuth
 - **Lock-файл** предотвращает запуск дублей
 - Автообновление каждые 60 секунд (настраивается)
 
@@ -127,8 +123,7 @@ All settings via environment variables:
 
 - **Windows 10 / 11**
 - **Python 3.10+**
-- **[Chrome Bridge](https://nicedayzhu.github.io/chrome-bridge/)** запущен на `localhost:3456`
-- Активная сессия Claude Pro/Team в Chrome
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** установлен и залогинен (CLI `claude`)
 
 ### Установка зависимостей
 
@@ -138,18 +133,15 @@ pip install pystray Pillow winotify
 
 ## Настройка
 
-### 1. Получить Organization ID
+### 1. Убедитесь что Claude Code залогинен
 
-1. Откройте [claude.ai/settings](https://claude.ai/settings) в Chrome
-2. Скопируйте UUID из URL: `claude.ai/settings/organizations/<ВАШ-ORG-ID>`
-
-### 2. Задать переменную окружения
-
-```powershell
-[Environment]::SetEnvironmentVariable("CLAUDE_ORG_ID", "ваш-org-id", "User")
+```bash
+claude
 ```
 
-### 3. Запуск
+Это создаёт `~/.claude/.credentials.json` с OAuth-токенами. Это всё что нужно приложению.
+
+### 2. Запуск
 
 ```bash
 # С консолью
@@ -162,7 +154,7 @@ pythonw -X utf8 claude-usage-tray.py
 wscript start-claude-tray.vbs
 ```
 
-### 4. Автозагрузка (опционально)
+### 3. Автозагрузка (опционально)
 
 Поместите ярлык на `start-claude-tray.vbs` в:
 ```
@@ -171,12 +163,10 @@ wscript start-claude-tray.vbs
 
 ## Конфигурация
 
-Все настройки через переменные окружения:
+Необязательные переменные окружения:
 
 | Переменная | По умолчанию | Описание |
 |------------|--------------|----------|
-| `CLAUDE_ORG_ID` | *(обязательно)* | UUID вашей организации Claude |
-| `CHROME_BRIDGE_URL` | `http://localhost:3456` | Адрес Chrome Bridge |
 | `CLAUDE_POLL_INTERVAL` | `60` | Интервал обновления в секундах |
 | `CLAUDE_WORKING_DIR` | `~` | Директория для пункта меню "Open Claude Code" |
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Claude Usage Tray - system tray monitor for Claude API usage."""
 
-VERSION = "1.4.0"
+VERSION = "2.0.0"
 
 import json
 import subprocess
@@ -13,16 +13,19 @@ import msvcrt
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import URLError
+from pathlib import Path
 
-LOCK_FILE = os.path.join(os.environ.get("TEMP", "C:/tmp"), "claude-usage-tray.lock")
+LOCK_FILE = os.path.join(os.environ.get("TEMP", "/tmp"), "claude-usage-tray.lock")
 
 import pystray
 from PIL import Image, ImageDraw, ImageFont
 from winotify import Notification, audio
 
 # --- Config ---
-CHROME_BRIDGE = os.environ.get("CHROME_BRIDGE_URL", "http://localhost:3456")
-ORG_ID = os.environ.get("CLAUDE_ORG_ID", "")
+CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+REFRESH_URL = "https://console.anthropic.com/api/oauth/token"
+CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 POLL_INTERVAL = int(os.environ.get("CLAUDE_POLL_INTERVAL", "60"))
 THRESHOLDS = [70, 80, 90]
 APP_ID = "Claude Usage Monitor"
@@ -40,47 +43,104 @@ state = {
     "notified_7d": set(),
     "prev_5h": 0,
     "prev_7d": 0,
+    "access_token": None,
 }
 
 
-def fetch_usage():
-    """Fetch usage via Chrome Bridge execute -> fetchData."""
+def load_credentials():
+    """Load OAuth credentials from Claude Code's credentials file."""
+    try:
+        data = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        oauth = data.get("claudeAiOauth", {})
+        state["access_token"] = oauth.get("accessToken")
+        return oauth
+    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+        state["error"] = f"credentials: {e}"
+        return None
+
+
+def refresh_token(oauth):
+    """Refresh expired access token using refresh token."""
+    refresh = oauth.get("refreshToken")
+    if not refresh:
+        state["error"] = "no refresh token"
+        return False
+
     payload = json.dumps({
-        "browser": "chrome",
-        "url": "https://claude.ai/settings",
-        "autoClose": True,
-        "actions": [
-            {
-                "type": "fetchData",
-                "fetchUrl": f"/api/organizations/{ORG_ID}/usage",
-            }
-        ],
-        "timeout": 30000,
+        "grant_type": "refresh_token",
+        "refresh_token": refresh,
+        "client_id": CLIENT_ID,
     }).encode()
 
     req = Request(
-        f"{CHROME_BRIDGE}/execute",
+        REFRESH_URL,
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urlopen(req, timeout=40) as resp:
+        with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
     except (URLError, TimeoutError, json.JSONDecodeError) as e:
+        state["error"] = f"refresh: {e}"
+        return False
+
+    new_token = data.get("access_token")
+    if not new_token:
+        state["error"] = "refresh: no token in response"
+        return False
+
+    state["access_token"] = new_token
+
+    # Update credentials file
+    try:
+        creds = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        creds["claudeAiOauth"]["accessToken"] = new_token
+        if data.get("refresh_token"):
+            creds["claudeAiOauth"]["refreshToken"] = data["refresh_token"]
+        if data.get("expires_in"):
+            creds["claudeAiOauth"]["expiresAt"] = int(
+                (time.time() + data["expires_in"]) * 1000
+            )
+        CREDENTIALS_PATH.write_text(
+            json.dumps(creds, indent=None), encoding="utf-8"
+        )
+    except Exception:
+        pass  # Token works in memory even if file write fails
+
+    return True
+
+
+def fetch_usage():
+    """Fetch usage via Anthropic OAuth API."""
+    if not state["access_token"]:
+        oauth = load_credentials()
+        if not oauth:
+            return False
+
+    req = Request(
+        USAGE_URL,
+        headers={
+            "Authorization": f"Bearer {state['access_token']}",
+            "anthropic-beta": "oauth-2025-04-20",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(req, timeout=15) as resp:
+            api = json.loads(resp.read())
+    except URLError as e:
+        # Token expired — try refresh
+        if hasattr(e, 'code') and e.code == 401:
+            oauth = load_credentials()
+            if oauth and refresh_token(oauth):
+                return fetch_usage()
+            return False
         state["error"] = str(e)
         return False
-
-    if not data.get("success"):
-        state["error"] = data.get("error", "unknown")
+    except (TimeoutError, json.JSONDecodeError) as e:
+        state["error"] = str(e)
         return False
-
-    results = data.get("result", {}).get("results", [])
-    if not results or not results[0].get("ok"):
-        state["error"] = "API returned error"
-        return False
-
-    api = results[0]["data"]
 
     for key in ("five_hour", "seven_day"):
         if api.get(key):
@@ -319,11 +379,13 @@ def acquire_lock():
 
 
 def main():
-    if not ORG_ID:
-        print("ERROR: Set CLAUDE_ORG_ID environment variable. "
-              "Find it at claude.ai/settings → URL contains /organizations/<ORG_ID>/",
+    if not CREDENTIALS_PATH.exists():
+        print(f"ERROR: Claude Code credentials not found at {CREDENTIALS_PATH}\n"
+              "Run 'claude' and log in first.",
               file=sys.stderr)
         sys.exit(1)
+
+    load_credentials()
 
     lock_fd = acquire_lock()
     fetch_usage()
