@@ -77,12 +77,38 @@ Place a shortcut to `start-claude-tray.vbs` in:
 
 ## Configuration
 
-Optional environment variables:
+On first run, `config.json` is created next to the script with default values. Edit it to customize:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_POLL_INTERVAL` | `60` | Refresh interval in seconds |
-| `CLAUDE_WORKING_DIR` | `~` | Directory for "Open Claude Code" menu item |
+```json
+{
+  "poll_interval": 60,
+  "thresholds": [70, 80, 90],
+  "icon_size": 64,
+  "credentials_path": "C:\\Users\\you\\.claude\\.credentials.json",
+  "working_dir": "C:\\Users\\you",
+  "notification_sound": true,
+  "notify_on_reset": true,
+  "colors": {
+    "green": [76, 175, 80],
+    "yellow": [255, 193, 7],
+    "orange": [255, 152, 0],
+    "red": [244, 67, 54]
+  },
+  "color_thresholds": [50, 70, 85]
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `poll_interval` | `60` | Refresh interval in seconds |
+| `thresholds` | `[70, 80, 90]` | Usage % levels that trigger notifications |
+| `icon_size` | `64` | Tray icon size in pixels |
+| `credentials_path` | `~/.claude/.credentials.json` | Path to Claude Code OAuth credentials |
+| `working_dir` | `~` | Directory for "Open Claude Code" menu item |
+| `notification_sound` | `true` | Play sound with toast notifications |
+| `notify_on_reset` | `true` | Notify when limits refresh (100% -> lower) |
+| `colors` | green/yellow/orange/red | RGB colors for each usage level |
+| `color_thresholds` | `[50, 70, 85]` | Usage % breakpoints for color changes |
 
 ---
 
@@ -163,12 +189,38 @@ wscript start-claude-tray.vbs
 
 ## Конфигурация
 
-Необязательные переменные окружения:
+При первом запуске рядом со скриптом создаётся `config.json` с настройками по умолчанию. Отредактируйте его:
 
-| Переменная | По умолчанию | Описание |
-|------------|--------------|----------|
-| `CLAUDE_POLL_INTERVAL` | `60` | Интервал обновления в секундах |
-| `CLAUDE_WORKING_DIR` | `~` | Директория для пункта меню "Open Claude Code" |
+```json
+{
+  "poll_interval": 60,
+  "thresholds": [70, 80, 90],
+  "icon_size": 64,
+  "credentials_path": "C:\\Users\\you\\.claude\\.credentials.json",
+  "working_dir": "C:\\Users\\you",
+  "notification_sound": true,
+  "notify_on_reset": true,
+  "colors": {
+    "green": [76, 175, 80],
+    "yellow": [255, 193, 7],
+    "orange": [255, 152, 0],
+    "red": [244, 67, 54]
+  },
+  "color_thresholds": [50, 70, 85]
+}
+```
+
+| Параметр | По умолчанию | Описание |
+|----------|--------------|----------|
+| `poll_interval` | `60` | Интервал обновления в секундах |
+| `thresholds` | `[70, 80, 90]` | Пороги % для уведомлений |
+| `icon_size` | `64` | Размер иконки в трее |
+| `credentials_path` | `~/.claude/.credentials.json` | Путь к OAuth-токенам Claude Code |
+| `working_dir` | `~` | Директория для пункта меню "Open Claude Code" |
+| `notification_sound` | `true` | Звук при уведомлениях |
+| `notify_on_reset` | `true` | Уведомлять при сбросе лимита (100% -> ниже) |
+| `colors` | green/yellow/orange/red | RGB-цвета для каждого уровня расхода |
+| `color_thresholds` | `[50, 70, 85]` | Пороги % для смены цвета иконки |
 
 ## License / Лицензия
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Claude Usage Tray - system tray monitor for Claude API usage."""
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 import json
 import subprocess
@@ -15,22 +15,75 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 from pathlib import Path
 
-LOCK_FILE = os.path.join(os.environ.get("TEMP", "/tmp"), "claude-usage-tray.lock")
-
 import pystray
 from PIL import Image, ImageDraw, ImageFont
 from winotify import Notification, audio
 
-# --- Config ---
-CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
+# --- Defaults ---
+DEFAULTS = {
+    "poll_interval": 60,
+    "thresholds": [70, 80, 90],
+    "icon_size": 64,
+    "credentials_path": str(Path.home() / ".claude" / ".credentials.json"),
+    "working_dir": str(Path.home()),
+    "notification_sound": True,
+    "notify_on_reset": True,
+    "colors": {
+        "green": [76, 175, 80],
+        "yellow": [255, 193, 7],
+        "orange": [255, 152, 0],
+        "red": [244, 67, 54],
+    },
+    "color_thresholds": [50, 70, 85],
+}
+
+# --- Config loading ---
+SCRIPT_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = SCRIPT_DIR / "config.json"
+LOCK_FILE = os.path.join(os.environ.get("TEMP", "/tmp"), "claude-usage-tray.lock")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 REFRESH_URL = "https://console.anthropic.com/api/oauth/token"
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-POLL_INTERVAL = int(os.environ.get("CLAUDE_POLL_INTERVAL", "60"))
-THRESHOLDS = [70, 80, 90]
 APP_ID = "Claude Usage Monitor"
-ICON_SIZE = 64
-WORKING_DIR = os.environ.get("CLAUDE_WORKING_DIR", os.path.expanduser("~"))
+
+
+def load_config():
+    """Load config from config.json, falling back to defaults."""
+    cfg = dict(DEFAULTS)
+    if CONFIG_PATH.exists():
+        try:
+            user_cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            for key, val in user_cfg.items():
+                if key in cfg:
+                    if key == "colors" and isinstance(val, dict):
+                        cfg["colors"].update(val)
+                    else:
+                        cfg[key] = val
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"Config error: {e}, using defaults", file=sys.stderr)
+    return cfg
+
+
+def save_default_config():
+    """Create config.json with defaults if it doesn't exist."""
+    if not CONFIG_PATH.exists():
+        CONFIG_PATH.write_text(
+            json.dumps(DEFAULTS, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+
+cfg = load_config()
+
+POLL_INTERVAL = cfg["poll_interval"]
+THRESHOLDS = cfg["thresholds"]
+ICON_SIZE = cfg["icon_size"]
+CREDENTIALS_PATH = Path(cfg["credentials_path"])
+WORKING_DIR = cfg["working_dir"]
+NOTIFICATION_SOUND = cfg["notification_sound"]
+NOTIFY_ON_RESET = cfg["notify_on_reset"]
+COLORS = cfg["colors"]
+COLOR_THRESHOLDS = cfg["color_thresholds"]
 
 # State
 state = {
@@ -232,14 +285,15 @@ def menu_extra_text(item):
 
 
 def get_color(pct):
-    """Icon color by percent: green -> yellow -> orange -> red."""
-    if pct < 50:
-        return (76, 175, 80)
-    if pct < 70:
-        return (255, 193, 7)
-    if pct < 85:
-        return (255, 152, 0)
-    return (244, 67, 54)
+    """Icon color by percent using configurable thresholds."""
+    t = COLOR_THRESHOLDS
+    if pct < t[0]:
+        return tuple(COLORS["green"])
+    if pct < t[1]:
+        return tuple(COLORS["yellow"])
+    if pct < t[2]:
+        return tuple(COLORS["orange"])
+    return tuple(COLORS["red"])
 
 
 def create_icon_image(pct):
@@ -275,7 +329,8 @@ def send_notification(title, message):
             msg=message,
             duration="short",
         )
-        toast.set_audio(audio.Default, loop=False)
+        if NOTIFICATION_SOUND:
+            toast.set_audio(audio.Default, loop=False)
         toast.show()
     except Exception as e:
         print(f"Notification error: {e}", file=sys.stderr)
@@ -294,7 +349,7 @@ def check_thresholds():
         notified = state[notified_key]
 
         # Limits refreshed: was >=100% and now <100%
-        if prev >= 100 and pct < 100:
+        if NOTIFY_ON_RESET and prev >= 100 and pct < 100:
             send_notification(
                 f"Claude {label}: limits refreshed!",
                 f"Now {pct}% used. Tokens available again!",
@@ -379,6 +434,8 @@ def acquire_lock():
 
 
 def main():
+    save_default_config()
+
     if not CREDENTIALS_PATH.exists():
         print(f"ERROR: Claude Code credentials not found at {CREDENTIALS_PATH}\n"
               "Run 'claude' and log in first.",
