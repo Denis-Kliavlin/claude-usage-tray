@@ -28,6 +28,7 @@ DEFAULTS = {
     "working_dir": str(Path.home()),
     "notification_sound": True,
     "notify_on_reset": True,
+    "reset_sound": True,
     "colors": {
         "green": [76, 175, 80],
         "yellow": [255, 193, 7],
@@ -82,6 +83,7 @@ CREDENTIALS_PATH = Path(cfg["credentials_path"])
 WORKING_DIR = cfg["working_dir"]
 NOTIFICATION_SOUND = cfg["notification_sound"]
 NOTIFY_ON_RESET = cfg["notify_on_reset"]
+RESET_SOUND = cfg.get("reset_sound", True)
 COLORS = cfg["colors"]
 COLOR_THRESHOLDS = cfg["color_thresholds"]
 
@@ -320,8 +322,9 @@ def create_icon_image(pct):
     return img
 
 
-def send_notification(title, message):
-    """Send Windows toast notification."""
+def send_notification(title, message, sound=None):
+    """Send Windows toast notification. sound overrides NOTIFICATION_SOUND if set."""
+    play_sound = sound if sound is not None else NOTIFICATION_SOUND
     try:
         toast = Notification(
             app_id=APP_ID,
@@ -329,7 +332,7 @@ def send_notification(title, message):
             msg=message,
             duration="short",
         )
-        if NOTIFICATION_SOUND:
+        if play_sound:
             toast.set_audio(audio.Default, loop=False)
         toast.show()
     except Exception as e:
@@ -353,6 +356,7 @@ def check_thresholds():
             send_notification(
                 f"Claude {label}: limits refreshed!",
                 f"Now {pct}% used. Tokens available again!",
+                sound=RESET_SOUND,
             )
 
         for threshold in THRESHOLDS:
@@ -477,6 +481,10 @@ def show_settings_window():
     ttk.Checkbutton(frame, text="Notify on limit reset", variable=reset_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
     row += 1
 
+    rsound_var = tk.BooleanVar(value=current.get("reset_sound", True))
+    ttk.Checkbutton(frame, text="Sound on limit reset", variable=rsound_var).grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+    row += 1
+
     # --- Color buttons ---
     color_vars = {}
     for name in ("green", "yellow", "orange", "red"):
@@ -518,6 +526,7 @@ def show_settings_window():
             "credentials_path": cred_var.get(),
             "notification_sound": sound_var.get(),
             "notify_on_reset": reset_var.get(),
+            "reset_sound": rsound_var.get(),
             "colors": color_vars,
         }
         try:
