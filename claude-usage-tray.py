@@ -351,11 +351,11 @@ def check_thresholds():
         reset_time = format_reset_time(state[key]["resets_at"])
         notified = state[notified_key]
 
-        # Limits refreshed: was >=100% and now <100%
-        if NOTIFY_ON_RESET and prev >= 100 and pct < 100:
+        # Limits reset: usage dropped from high to low
+        if NOTIFY_ON_RESET and prev >= min(THRESHOLDS) and pct < min(THRESHOLDS):
             send_notification(
-                f"Claude {label}: limits refreshed!",
-                f"Now {pct}% used. Tokens available again!",
+                f"Claude {label}: {prev}% → {pct}%",
+                f"Limits refreshed! Now {pct}% used.",
                 sound=RESET_SOUND,
             )
 
